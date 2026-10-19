@@ -1,0 +1,23 @@
+# Dependencies
+/node_modules
+/.next/
+/out/
+
+# Build
+*.tsbuildinfo
+next-env.d.ts
+
+# Env — NEVER commit real secrets
+.env
+.env*.local
+.env.development
+.env.production
+
+# Prisma
+# Keep migrations, ignore generated client if you prefer (postinstall regenerates it)
+# /src/generated
+
+# Misc
+.DS_Store
+*.log
+.vercel

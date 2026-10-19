@@ -1,0 +1,249 @@
+// Prisma schema — App Ghi Chép Chi Tiêu Gia Đình
+// DB: PostgreSQL (Neon / Supabase / Vercel Postgres).
+// Tiền VND lưu dạng số nguyên (đồng), KHÔNG dùng float/decimal để tránh lỗi thập phân.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+enum WalletType {
+  CASH
+  BANK
+  CARD
+  GOLD
+  OTHER
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   HouseholdMember[]
+  createdTxns   Transaction[] @relation("CreatedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// NextAuth models (bắt buộc cho PrismaAdapter)
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Hộ gia đình: 1 tài khoản tạo household, mời vợ/chồng bằng Gmail để dùng chung.
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members    HouseholdMember[]
+  wallets    Wallet[]
+  categories Category[]
+  transactions Transaction[]
+  budgets    Budget[]
+  goals      Goal[]
+  allocation AllocationSetting?
+
+  @@index([ownerId])
+}
+
+model HouseholdMember {
+  id          String       @id @default(cuid())
+  householdId String
+  userId      String?      // null khi mới mời, chưa đăng nhập
+  invitedEmail String?     // email Gmail được mời
+  role        Role         @default(MEMBER)
+  status      InviteStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@unique([householdId, invitedEmail])
+  @@index([userId])
+  @@index([invitedEmail])
+}
+
+model Wallet {
+  id             String     @id @default(cuid())
+  householdId    String
+  name           String     // Ví dụ: Tiền mặt, Vietcombank, Thẻ tín dụng, Vàng
+  type           WalletType @default(CASH)
+  // Số dư ban đầu khi tạo ví (VND, số nguyên). Số tiền thực tế = initialBalance + tổng giao dịch của ví.
+  initialBalance Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([householdId])
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  householdId String
+  name        String
+  type        CategoryType
+  color       String       @default("#2563eb")
+  isDefault   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@unique([householdId, name, type])
+  @@index([householdId])
+}
+
+model Transaction {
+  id             String          @id @default(cuid())
+  householdId    String
+  walletId       String?
+  categoryId     String
+  type           TransactionType
+  // Số tiền VND, số nguyên > 0.
+  amount         Int
+  date           DateTime        @default(now())
+  note           String?
+  isChildExpense Boolean         @default(false)
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  wallet    Wallet?   @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy User?     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([householdId, date])
+  @@index([householdId, categoryId])
+}
+
+model Budget {
+  id          String   @id @default(cuid())
+  householdId String
+  categoryId  String
+  // Tháng dạng YYYY-MM, ví dụ "2026-10".
+  month       String
+  limit       Int      // Hạn mức VND, số nguyên >= 0
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, categoryId, month])
+  @@index([householdId, month])
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  householdId String
+  name        String   // Ví dụ: Quỹ mua nhà, Quỹ học cho con
+  targetAmount Int     // Số tiền mục tiêu (VND)
+  savedAmount  Int     @default(0) // Đã tiết kiệm (VND)
+  // Tháng hoàn thành dạng YYYY-MM, ví dụ "2027-04".
+  deadlineMonth String
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household     Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  contributions GoalContribution[]
+
+  @@index([householdId])
+}
+
+model GoalContribution {
+  id        String   @id @default(cuid())
+  goalId    String
+  // Số tiền ghi vào (+) hoặc rút ra (-). Lưu amount dương + kind để dễ tính.
+  amount    Int
+  kind      String   @default("DEPOSIT") // DEPOSIT | WITHDRAW
+  note      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId, date])
+}
+
+model AllocationSetting {
+  id          String   @id @default(cuid())
+  householdId String   @unique
+  // Tỉ lệ % — tổng phải = 100. Mặc định 50/30/20.
+  needs       Int      @default(50)
+  wants       Int      @default(30)
+  savings     Int      @default(20)
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+}

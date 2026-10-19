@@ -14,8 +14,19 @@ export default function LoginPage() {
       <button onClick={() => signIn("google", { callbackUrl: "/dashboard" })} className="mt-6 w-full rounded-xl bg-brand-600 py-3 font-semibold text-white hover:bg-brand-700">
         Đăng nhập bằng Gmail (Google)
       </button>
-      <p className="mt-4 text-xs text-slate-500">Khi đăng nhập, bạn sẽ có hộ gia đình riêng. Muốn dùng chung với vợ/chồng, vào Cài đặt → mời bằng email Gmail của người kia.</p>
-      {session?.user?.email && <p className="mt-2 text-xs text-emerald-600">Đã đăng nhập: {session.user.email}</p>}
+      {status === "authenticated" && (
+        <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-center">
+          <p className="text-sm font-medium text-emerald-800">
+            Đã đăng nhập: {session?.user?.email}
+          </p>
+          <a
+            href="/dashboard"
+            className="mt-3 inline-block w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            Vào Bảng Điều Khiển (Dashboard) →
+          </a>
+        </div>
+      )}
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 import { prisma } from "./prisma";
+import { ensureHouseholdForUser } from "./household-setup";
 
 export async function getSessionUser() {
   const session = await getServerSession(authOptions);
@@ -16,7 +17,10 @@ export async function getMyHousehold(userId: string) {
     orderBy: { createdAt: "desc" },
     include: { household: true },
   });
-  return membership?.household ?? null;
+  if (membership?.household) return membership.household;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  return ensureHouseholdForUser(userId, user?.name);
 }
 
 /**

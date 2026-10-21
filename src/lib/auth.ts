@@ -6,13 +6,16 @@ import { ensureHouseholdForUser } from "./household-setup";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 60 * 24 * 60 * 60, // Ghi nhớ đăng nhập trong 60 ngày
+    updateAge: 24 * 60 * 60, // Tự động gia hạn thêm mỗi ngày khi bạn mở app
+  },
   providers: [
     // Chỉ cho phép đăng nhập bằng Gmail (Google). Không có Credentials, không có provider khác.
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      authorization: { params: { prompt: "select_account" } },
     }),
   ],
   pages: { signIn: "/login" },
